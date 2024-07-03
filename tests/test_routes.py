@@ -28,6 +28,7 @@ import os
 import logging
 from decimal import Decimal
 from unittest import TestCase
+from urllib.parse import quote_plus
 from service import app
 from service.common import status
 from service.models import db, init_db, Product
@@ -166,6 +167,86 @@ class TestProductRoutes(TestCase):
     #
     # ADD YOUR TEST CASES HERE
     #
+
+    def test_get_product(self):
+        """It should get or read a product"""
+        products = self._create_products(1)
+        test_product = products[0]
+        response = self.client.get(f"{BASE_URL}/{test_product.id}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        json = response.get_json()
+        self.assertEqual(json["id"], test_product.id)
+
+    def test_get_product_bad_id(self):
+        """It should not get or read a product with id that references no products"""
+        response = self.client.get(f"{BASE_URL}/0")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_update_product(self):
+        """It should update a product"""
+        test_product = self._create_products(1)[0]
+        response = self.client.post(BASE_URL, json=test_product.serialize())
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        new_product = response.get_json()
+        new_desc = "tiger-bear"
+        new_product["description"] = new_desc
+        response = self.client.put(f"{BASE_URL}/{new_product['id']}", json=new_product)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.get_json()["description"], new_desc)
+
+    def test_delete_product(self):
+        """It should delete a product"""
+        num = 5
+        products = self._create_products(num)
+        self.assertEqual(self.get_product_count(), num)
+        response = self.client.delete(f"{BASE_URL}/{products[0].id}")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(len(response.data), 0)
+        response = self.client.get(f"{BASE_URL}/{products[0].id}")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(self.get_product_count(), num-1) 
+
+    def test_list_product_by_name(self):
+        """It should list product by name"""
+        products = self._create_products(5)
+        test_product = products[0]
+        occurence = len([product for product in products if product.name == test_product.name])
+        response = self.client.get(BASE_URL, query_string=f"name={quote_plus(test_product.name)}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(len(data), occurence)
+        for item in data:
+            self.assertEqual(item["name"], test_product.name)
+
+    def test_list_product_by_category(self):
+        """It should list product by category"""
+        products = self._create_products(7)
+        test_category = products[0].category
+        occurence = len([product for product in products if product.category == test_category])
+        response = self.client.get(BASE_URL, query_string=f"category={test_category.name}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(len(data), occurence)
+        for item in data:
+            self.assertEqual(item["category"], test_category.name)
+
+    def test_list_product_by_availability(self):
+        """It should list product by availability"""
+        products = self._create_products(10)
+        test_available = True
+        occurence = len([product for product in products if product.available is test_available])
+        response = self.client.get(BASE_URL, query_string=f"available={test_available}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(len(data), occurence)
+        for item in data:
+            self.assertEqual(item["available"], test_available)
+
+    def test_list_all_products(self):
+        self._create_products(10)
+        response = self.client.get(BASE_URL)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.get_json()), 10)
 
     ######################################################################
     # Utility functions
